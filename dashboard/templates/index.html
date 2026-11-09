@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Performance Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  /* ---------- themes: Light (default, professional) · Dark · Aurora · Terminal · Paper ---------- */
+  :root, [data-theme=light] {
+    --bg:#f4f6f9; --page-bg:#f4f6f9; --panel:#ffffff; --panel2:#f1f4f8; --line:#e2e8f0; --fg:#0f172a; --mute:#64748b; --grid:#edf1f6;
+    --tcp:#2563eb; --udp:#ea580c; --bad:#dc2626; --ok:#16a34a; --warn:#ca8a04; --accent:#1d4ed8;
+    --r:10px; --shadow:0 1px 2px rgba(15,23,42,.05); --blur:none;
+    --font:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --head:var(--font);
+  }
+  [data-theme=dark] {
+    --bg:#0e1319; --page-bg:#0e1319; --panel:#151c25; --panel2:#1b2430; --line:#26313f; --fg:#e6ebf2; --mute:#8b98a9; --grid:#1e2833;
+    --tcp:#60a5fa; --udp:#fb923c; --bad:#f87171; --ok:#4ade80; --warn:#facc15; --accent:#3b82f6;
+    --r:10px; --shadow:none; --blur:none;
+    --font:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --head:var(--font);
+  }
+  [data-theme=aurora] {
+    --bg:#0d0a1f; --page-bg:radial-gradient(1200px 600px at 10% -10%, #2a1458 0%, transparent 60%), radial-gradient(900px 500px at 100% 0%, #0b3a5c 0%, transparent 55%), #0d0a1f;
+    --panel:rgba(30,24,64,.55); --panel2:rgba(255,255,255,.07); --line:rgba(160,150,255,.18); --fg:#efeaff; --mute:#a59fcb; --grid:rgba(160,150,255,.12);
+    --tcp:#38d6ff; --udp:#ff8ad8; --bad:#ff5c7a; --ok:#4ade80; --warn:#fcd34d; --accent:#8b5cf6;
+    --r:18px; --shadow:0 8px 30px rgba(10,5,40,.45); --blur:blur(14px);
+    --font:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif; --head:var(--font);
+  }
+  [data-theme=terminal] {
+    --bg:#020a04; --page-bg:#020a04; --panel:#04110a; --panel2:#072015; --line:#0f4a28; --fg:#7dff9f; --mute:#3fae68; --grid:#0a2b18;
+    --tcp:#4dffb8; --udp:#ffd23f; --bad:#ff4d4d; --ok:#39ff14; --warn:#ffd23f; --accent:#19c45a;
+    --r:2px; --shadow:0 0 0 1px #0f4a28 inset, 0 0 18px rgba(25,196,90,.10); --blur:none;
+    --font:ui-monospace,"JetBrains Mono","Fira Code",Menlo,Consolas,monospace; --head:var(--font);
+  }
+  [data-theme=paper] {
+    --bg:#f6f1e7; --page-bg:#f6f1e7; --panel:#fffdf8; --panel2:#efe8d9; --line:#dcd2bd; --fg:#2b2418; --mute:#7a6d55; --grid:#ece4d2;
+    --tcp:#2457a6; --udp:#c2571a; --bad:#b3261e; --ok:#2f7d32; --warn:#a96a00; --accent:#2457a6;
+    --r:6px; --shadow:0 1px 0 rgba(60,45,20,.06), 0 2px 8px rgba(60,45,20,.06); --blur:none;
+    --font:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif; --head:var(--font);
+  }
+  * { box-sizing:border-box; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .brand .mark { width:34px; height:34px; border-radius:9px; background:var(--accent); display:grid; place-items:center; flex:none; }
+  .brand .mark svg { width:20px; height:20px; stroke:#fff; fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+  .brand .sub { font-size:12px; color:var(--mute); margin-top:1px; }
+  [data-theme=light] header { background:#fff; }
+  [data-theme=dark] header { background:#111820; }
+  [data-theme=light] .card h2, [data-theme=dark] .card h2, [data-theme=light] .kpi h3, [data-theme=dark] .kpi h3 { text-transform:none; letter-spacing:.1px; font-size:13px; color:var(--fg); font-weight:600; }
+  [data-theme=light] .kpi .v, [data-theme=dark] .kpi .v { font-weight:600; letter-spacing:-.3px; }
+  [data-theme=light] .health, [data-theme=dark] .health { border-left-width:4px; }
+  [data-theme=light] .health.ok, [data-theme=dark] .health.ok { border-left-color:var(--ok); }
+  [data-theme=light] .health.warn, [data-theme=dark] .health.warn { border-left-color:var(--warn); }
+  [data-theme=light] .health.bad, [data-theme=dark] .health.bad { border-left-color:var(--bad); }
+  [data-theme=light] th, [data-theme=dark] th { text-transform:none; font-size:12px; letter-spacing:0; }
+  [data-theme=light] .tabs button.on { background:#fff; color:var(--fg); box-shadow:0 1px 2px rgba(15,23,42,.12); }
+  [data-theme=light] .controls label, [data-theme=dark] .controls label { text-transform:none; font-size:12px; letter-spacing:0; font-weight:500; }
+  body { margin:0; background:var(--page-bg); background-attachment:fixed; color:var(--fg); font:14px/1.45 var(--font); min-height:100vh; }
+  .card, .kpi, .controls, .health { box-shadow:var(--shadow); -webkit-backdrop-filter:var(--blur); backdrop-filter:var(--blur); }
+  h1, .card h2, .kpi h3 { font-family:var(--head); }
+  [data-theme=terminal] h1::before { content:"> "; color:var(--ok); }
+  [data-theme=terminal] h1, [data-theme=terminal] .kpi .v { text-shadow:0 0 8px rgba(57,255,20,.45); }
+  [data-theme=terminal] .card h2, [data-theme=terminal] .kpi h3, [data-theme=terminal] label { letter-spacing:1.2px; }
+  [data-theme=terminal] button, [data-theme=terminal] input, [data-theme=terminal] select { font-family:var(--font); }
+  [data-theme=terminal] .kpi .v { font-weight:500; }
+  [data-theme=paper] h1 { font-style:italic; font-weight:600; font-size:20px; }
+  [data-theme=paper] .card h2, [data-theme=paper] .kpi h3, [data-theme=paper] label, [data-theme=paper] th { text-transform:none; letter-spacing:.2px; font-size:12.5px; }
+  [data-theme=paper] .pill, [data-theme=paper] .health .badge { border-radius:4px; }
+  [data-theme=aurora] .kpi, [data-theme=aurora] .card { background:linear-gradient(160deg, rgba(60,45,130,.42), rgba(20,16,50,.55)); }
+  [data-theme=aurora] .kpi .v { background:linear-gradient(90deg,#fff,#cfc4ff); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  [data-theme=aurora] .kpi .v.warn { background:none; color:var(--warn); }
+  [data-theme=aurora] .kpi .v.bad { background:none; color:var(--bad); }
+  [data-theme=aurora] button.primary { background:linear-gradient(90deg,#8b5cf6,#38bdf8); border-color:transparent; }
+  #themeSel { min-width:0; padding:6px 10px; border-radius:9px; background:var(--panel2); }
+  .num { font-variant-numeric:tabular-nums; }
+  header { position:sticky; top:0; z-index:5; background:color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter:blur(8px);
+           border-bottom:1px solid var(--line); padding:12px 24px; display:flex; flex-wrap:wrap; gap:12px 18px; align-items:center; }
+  h1 { font-size:17px; margin:0; font-weight:650; letter-spacing:.2px; }
+  .pill { display:inline-flex; align-items:center; gap:8px; padding:4px 12px; border-radius:999px; background:var(--panel2);
+          border:1px solid var(--line); font-size:12.5px; color:var(--mute); }
+  .dot { width:8px; height:8px; border-radius:50%; background:#7a8697; }
+  .pill.live { color:var(--fg); } .pill.live .dot { background:var(--ok); animation:pulse 1.6s infinite; }
+  .pill.err { color:var(--bad); } .pill.err .dot { background:var(--bad); }
+  @keyframes pulse { 0% { box-shadow:0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent);} 70%,100% { box-shadow:0 0 0 8px transparent;} }
+  .spacer { flex:1; }
+  .tabs { display:flex; gap:4px; background:var(--panel2); padding:3px; border-radius:9px; border:1px solid var(--line); }
+  .tabs button { border:0; background:none; color:var(--mute); padding:6px 14px; border-radius:7px; cursor:pointer; font:inherit; }
+  .tabs button.on { background:var(--line); color:var(--fg); }
+  .icon { background:var(--panel2); border:1px solid var(--line); color:var(--fg); width:34px; height:34px; border-radius:9px; cursor:pointer; font-size:15px; }
+  main { padding:18px 24px 40px; max-width:1500px; margin:0 auto; }
+
+  .controls { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:end; background:var(--panel); border:1px solid var(--line);
+              border-radius:var(--r); padding:12px 14px; margin-bottom:14px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--mute); text-transform:uppercase; letter-spacing:.5px; }
+  label.inline { flex-direction:row; align-items:center; gap:7px; text-transform:none; font-size:13px; color:var(--fg); letter-spacing:0; padding-bottom:8px; cursor:pointer; }
+  input, select { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:inherit; min-width:110px; }
+  input[type=checkbox] { min-width:0; width:16px; height:16px; accent-color:var(--accent); }
+  input:focus, select:focus { outline:2px solid color-mix(in srgb, var(--accent) 45%, transparent); border-color:var(--accent); }
+  .sep { width:1px; align-self:stretch; background:var(--line); margin:0 4px; }
+  button.btn { background:var(--panel2); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:8px 14px; cursor:pointer; font:inherit; font-weight:600; }
+  button.btn:hover { border-color:var(--mute); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; } button.primary:hover { filter:brightness(1.12); }
+  [data-theme=terminal] button.primary { color:#021; }
+  button.stop { background:color-mix(in srgb, var(--bad) 18%, var(--panel2)); border-color:var(--bad); color:var(--bad); }
+  button:disabled { opacity:.55; cursor:wait; }
+
+  .health { display:flex; align-items:center; gap:14px; padding:12px 16px; border-radius:var(--r); border:1px solid var(--line);
+            background:var(--panel); margin-bottom:14px; }
+  .health .badge { font-weight:700; font-size:13px; padding:4px 12px; border-radius:999px; letter-spacing:.3px; white-space:nowrap; }
+  .health .why { color:var(--mute); }
+  .health.ok { border-color:color-mix(in srgb, var(--ok) 45%, var(--line)); } .health.ok .badge { background:color-mix(in srgb, var(--ok) 20%, transparent); color:var(--ok); }
+  .health.warn { border-color:color-mix(in srgb, var(--warn) 50%, var(--line)); } .health.warn .badge { background:color-mix(in srgb, var(--warn) 20%, transparent); color:var(--warn); }
+  .health.bad { border-color:color-mix(in srgb, var(--bad) 50%, var(--line)); } .health.bad .badge { background:color-mix(in srgb, var(--bad) 20%, transparent); color:var(--bad); }
+  .health.idle .badge { background:var(--panel2); color:var(--mute); }
+
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-bottom:14px; }
+  .kpi { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:12px 14px; }
+  .kpi h3 { margin:0 0 6px; font-size:11px; font-weight:600; color:var(--mute); text-transform:uppercase; letter-spacing:.6px; }
+  .kpi .row { display:grid; grid-template-columns:34px 1fr auto; gap:8px; align-items:center; padding:3px 0; }
+  .kpi .p { font-size:11px; font-weight:700; } .p.tcp { color:var(--tcp); } .p.udp { color:var(--udp); }
+  .kpi .v { font-size:23px; font-weight:650; text-align:right; } .kpi .v small { font-size:11.5px; color:var(--mute); font-weight:500; margin-left:3px; }
+  .v.warn { color:var(--warn); } .v.bad { color:var(--bad); }
+  svg.spark { width:100%; height:24px; display:block; overflow:visible; }
+  svg.spark path { fill:none; stroke-width:1.5; stroke-linejoin:round; stroke-linecap:round; }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:14px 16px; min-width:0; }
+  .card h2 { font-size:11.5px; margin:0 0 10px; color:var(--mute); font-weight:600; text-transform:uppercase; letter-spacing:.6px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  .wide { grid-column:1/-1; }
+  #expGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  @media (max-width:900px) { #expGrid { grid-template-columns:1fr; } }
+  .legend { display:flex; gap:14px; font-size:12px; text-transform:none; letter-spacing:0; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+  .chartbox { position:relative; height:310px; } .chartbox.sm { height:230px; }
+  .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+             color:var(--mute); text-align:center; background:color-mix(in srgb, var(--panel) 80%, transparent); z-index:2; border-radius:8px; }
+  .overlay b { color:var(--fg); font-size:15px; }
+
+  .events { list-style:none; margin:0; padding:0; height:230px; overflow:auto; font-size:13px; }
+  .events li { display:flex; gap:10px; padding:6px 2px; border-bottom:1px solid var(--line); align-items:center; }
+  .events .t { color:var(--mute); } .events .none { color:var(--mute); border:0; justify-content:center; padding-top:70px; }
+  .tag { padding:2px 8px; border-radius:6px; font-size:11.5px; font-weight:600; }
+  .tag.tcp { background:color-mix(in srgb, var(--tcp) 18%, transparent); color:var(--tcp); }
+  .tag.udp { background:color-mix(in srgb, var(--udp) 18%, transparent); color:var(--udp); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:7px 10px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align:left; }
+  th { color:var(--mute); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+  tr:hover td { background:color-mix(in srgb, var(--fg) 4%, transparent); }
+  .tablewrap { overflow-x:auto; }
+  .empty { padding:48px; text-align:center; color:var(--mute); }
+  .hint { color:var(--mute); font-size:12px; margin-top:10px; }
+  code { background:var(--panel2); padding:1px 6px; border-radius:5px; font-size:12px; }
+  .toast { position:fixed; right:20px; bottom:20px; background:var(--panel2); border:1px solid var(--line); padding:10px 14px; border-radius:10px; display:none; max-width:360px; z-index:20; }
+  .toast.show { display:block; } .toast.err { border-color:var(--bad); color:var(--bad); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="mark"><svg viewBox="0 0 24 24"><polyline points="2,13 7,13 10,5 14,19 17,11 22,11"/></svg></span>
+    <div><h1>Network Performance Dashboard</h1><div class="sub">TCP / UDP link monitoring · Computer A ⇄ Computer B</div></div>
+  </div>
+  <span id="status" class="pill"><span class="dot"></span><span id="statusText">Idle</span></span>
+  <span class="spacer"></span>
+  <div class="tabs">
+    <button id="tab-live" class="on" onclick="showTab('live')">Live</button>
+    <button id="tab-exp" onclick="showTab('exp')">Experiments</button>
+  </div>
+  <select id="themeSel" onchange="setTheme(this.value)" title="Theme">
+    <option value="light">Light</option><option value="dark">Dark</option>
+    <option value="aurora">Aurora</option><option value="terminal">Terminal</option><option value="paper">Paper</option></select>
+</header>
+
+<main>
+<!-- ============================ LIVE ============================ -->
+<section id="view-live">
+  <div class="controls">
+    <label>Server (Computer B)<input id="server" placeholder="192.168.1.20" size="15"></label>
+    <label>Probe interval
+      <select id="interval"><option value="50">50 ms</option><option value="100">100 ms</option>
+        <option value="200" selected>200 ms</option><option value="500">500 ms</option><option value="1000">1 s</option></select></label>
+    <button id="startBtn" class="btn primary" onclick="toggleProbe()">Start live probe</button>
+    <span class="sep"></span>
+    <label>Chart window
+      <select id="win" onchange="setWindow()"><option value="30">30 s</option><option value="60" selected>60 s</option><option value="300">5 min</option></select></label>
+    <label class="inline"><input type="checkbox" id="logscale" onchange="setLog()"> Log scale</label>
+    <button id="pauseBtn" class="btn" onclick="togglePause()">Pause</button>
+    <button class="btn" onclick="exportCsv()">Export CSV</button>
+    <span class="sep"></span>
+    <label>Label for throughput tests<input id="label" value="live" size="12"></label>
+    <button id="tpBtn" class="btn" onclick="runThroughput()">Run throughput test</button>
+  </div>
+
+  <div id="health" class="health idle"><span class="badge">IDLE</span><span class="why">Enter Computer B's IP and press “Start live probe” to see network health.</span></div>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid">
+    <div class="card wide">
+      <h2><span id="rttTitle">Round-trip time · last 60 s</span>
+        <span class="legend"><span><i style="background:var(--tcp)"></i>TCP</span><span><i style="background:var(--udp)"></i>UDP</span><span><i style="background:var(--bad)"></i>lost / timeout</span></span></h2>
+      <div class="chartbox"><canvas id="cLive"></canvas>
+        <div class="overlay" id="liveEmpty"><b>No live data yet</b><span>Start the live probe to stream TCP &amp; UDP round-trip times.</span></div></div>
+    </div>
+    <div class="card"><h2>Lost probes per second</h2><div class="chartbox sm"><canvas id="cLossLive"></canvas></div></div>
+    <div class="card"><h2>RTT distribution</h2><div class="chartbox sm"><canvas id="cHist"></canvas></div></div>
+    <div class="card"><h2>Recent loss / timeout events</h2><ul class="events" id="events"><li class="none">No events</li></ul></div>
+  </div>
+  <p class="hint">Tip: while probing, run <code>sudo tc qdisc add dev eth0 root netem delay 100ms loss 5%</code> on Computer A and watch RTT, jitter and loss react.
+    TCP "loss" = timeouts / connection resets (TCP retransmits, so real loss appears as RTT spikes). Health thresholds: loss &gt;1% / RTT &gt;50 ms / jitter &gt;10 ms = degraded; &gt;5% / &gt;150 ms / &gt;30 ms = poor.</p>
+</section>
+
+<!-- ======================== EXPERIMENTS ========================= -->
+<section id="view-exp" hidden>
+  <div class="controls">
+    <label>Condition (time-series)<select id="cond"></select></label>
+    <button class="btn" onclick="loadExp()">Refresh</button>
+    <span class="spacer"></span><span class="hint" style="margin:0">Averaged over repeated runs from <code>data/results.db</code> · auto-refresh every 5 s</span>
+  </div>
+  <div id="expEmpty" class="empty" hidden>No experiment data yet. Run <code>client/test_runner.py</code> or <code>scripts/run_matrix.sh</code>.</div>
+  <div class="grid" id="expGrid">
+    <div class="card"><h2>Average RTT (ms)<span class="legend"><span><i style="background:var(--tcp)"></i>TCP</span><span><i style="background:var(--udp)"></i>UDP</span></span></h2><div class="chartbox sm"><canvas id="cRtt"></canvas></div></div>
+    <div class="card"><h2>Throughput (Mbit/s)<span class="legend"><span><i style="background:var(--tcp)"></i>TCP bulk</span><span><i style="background:var(--udp)"></i>UDP @ offered rate</span></span></h2><div class="chartbox sm"><canvas id="cThr"></canvas></div></div>
+    <div class="card"><h2>UDP packet loss (%)<span class="legend"><span><i style="background:var(--udp)"></i>low rate</span><span><i style="background:var(--bad)"></i>offered rate</span></span></h2><div class="chartbox sm"><canvas id="cLoss"></canvas></div></div>
+    <div class="card"><h2>Jitter (ms)<span class="legend"><span><i style="background:var(--tcp)"></i>TCP</span><span><i style="background:var(--udp)"></i>UDP</span></span></h2><div class="chartbox sm"><canvas id="cJit"></canvas></div></div>
+    <div class="card wide"><h2>RTT over the run · selected condition (ms)<span class="legend"><span><i style="background:var(--tcp)"></i>TCP</span><span><i style="background:var(--udp)"></i>UDP (gaps = lost packets)</span></span></h2><div class="chartbox"><canvas id="cTs"></canvas></div></div>
+    <div class="card wide"><h2>Summary</h2><div class="tablewrap" id="tbl"></div></div>
+  </div>
+</section>
+</main>
+<div id="toast" class="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const f = (v, n = 2) => (v == null || isNaN(v)) ? '–' : Number(v).toFixed(n);
+const C = {};
+const charts = {};
+const baseOpts = { responsive:true, maintainAspectRatio:false, animation:false,
+  plugins:{ legend:{ display:false }, tooltip:{ mode:'index', intersect:false } } };
+
+const THEMES = ['light', 'dark', 'aurora', 'terminal', 'paper'];
+function applyTheme(t) {
+  if (!THEMES.includes(t)) t = 'light';
+  document.documentElement.dataset.theme = t;
+  $('#themeSel').value = t;
+  C.tcp = css('--tcp'); C.udp = css('--udp'); C.bad = css('--bad');
+  Chart.defaults.color = css('--mute'); Chart.defaults.borderColor = css('--grid');
+  Chart.defaults.font.family = css('--font');
+}
+function setTheme(t) {
+  try { localStorage.setItem('theme', t); } catch (e) {}
+  applyTheme(t); liveChart(); histCharts(); if (tab === 'exp') loadExp();
+}
+let saved = null; try { saved = localStorage.getItem('theme'); } catch (e) {}
+applyTheme(saved);
+
+function toast(msg, err) {
+  const t = $('#toast'); t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(t._h); t._h = setTimeout(() => t.className = 'toast', 4500);
+}
+function draw(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($('#' + id), cfg); return charts[id]; }
+
+/* ------------------------------ tabs ------------------------------ */
+let tab = 'live';
+function showTab(t) {
+  tab = t;
+  $('#view-live').hidden = t !== 'live'; $('#view-exp').hidden = t !== 'exp';
+  $('#tab-live').className = t === 'live' ? 'on' : ''; $('#tab-exp').className = t === 'exp' ? 'on' : '';
+  if (t === 'exp') loadExp();
+}
+
+/* ------------------------------ live ------------------------------ */
+const L = { since:0, TCP:[], UDP:[], lost:[], raw:[], events:[], now:Date.now() / 1000, running:false, paused:false,
+            log:false, window:60, tp:{}, hist:{ TCP:{}, UDP:{} }, stats:{ TCP:{}, UDP:{} } };
+const KEYS = ['last', 'rtt_avg', 'rtt_p95', 'jitter_ms', 'loss_pct'];
+try { $('#server').value = localStorage.getItem('server') || ''; } catch (e) {}
+
+function liveChart() {
+  draw('cLive', { type:'line', data:{ datasets:[
+      { label:'TCP', data:[], borderColor:C.tcp, backgroundColor:C.tcp, borderWidth:1.6, pointRadius:0, tension:.15 },
+      { label:'UDP', data:[], borderColor:C.udp, backgroundColor:C.udp, borderWidth:1.6, pointRadius:0, tension:.15 },
+      { label:'lost', data:[], showLine:false, pointStyle:'crossRot', pointRadius:5, borderColor:C.bad, borderWidth:2 } ] },
+    options:{ ...baseOpts, parsing:false, scales:{
+      x:{ type:'linear', ticks:{ callback:v => (v - L.now >= -0.5 ? 'now' : Math.round(v - L.now) + 's'), maxTicksLimit:8 } },
+      y: L.log ? { type:'logarithmic', min:0.05, title:{ display:true, text:'ms (log)' } }
+               : { beginAtZero:true, title:{ display:true, text:'ms' } } } } });
+}
+function histCharts() {
+  draw('cLossLive', { type:'bar', data:{ labels:[], datasets:[{ data:[], backgroundColor:C.bad, borderRadius:3 }] },
+    options:{ ...baseOpts, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }, title:{ display:true, text:'lost probes' } }, x:{ grid:{ display:false }, ticks:{ maxTicksLimit:8 } } } } });
+  draw('cHist', { type:'bar', data:{ labels:[], datasets:[
+      { label:'TCP', data:[], backgroundColor:C.tcp, borderRadius:3 }, { label:'UDP', data:[], backgroundColor:C.udp, borderRadius:3 }] },
+    options:{ ...baseOpts, scales:{ y:{ beginAtZero:true, title:{ display:true, text:'probes' } }, x:{ title:{ display:true, text:'RTT (ms)' }, grid:{ display:false } } } } });
+}
+
+function spark(arr, color) {
+  if (!arr || arr.length < 2) return '<svg class="spark"></svg>';
+  const lo = Math.min(...arr), hi = Math.max(...arr), span = (hi - lo) || 1;
+  const pts = arr.map((v, i) => `${(i / (arr.length - 1) * 100).toFixed(1)},${(22 - (v - lo) / span * 20).toFixed(1)}`);
+  return `<svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none"><path d="M${pts.join('L')}" style="stroke:${color}" vector-effect="non-scaling-stroke"/></svg>`;
+}
+function kpiCard(title, unit, key, n, cls) {
+  const row = pr => { const v = L.stats[pr][key]; const c = cls ? cls(v) : '';
+    return `<div class="row"><span class="p ${pr.toLowerCase()}">${pr}</span>${spark(L.hist[pr][key], pr === 'TCP' ? C.tcp : C.udp)}
+            <span class="v num ${c}">${f(v, n)}<small>${unit}</small></span></div>`; };
+  return `<div class="kpi"><h3>${title}</h3>${row('TCP')}${row('UDP')}</div>`;
+}
+function renderKpis() {
+  const lossCls = v => v > 2 ? 'bad' : v > 0 ? 'warn' : '';
+  const tp = L.tp, t = tp.tcp_bulk, u = tp.udp_throughput;
+  $('#kpis').innerHTML =
+    kpiCard('RTT now', 'ms', 'last', 2) + kpiCard('RTT average · 10 s', 'ms', 'rtt_avg', 2) + kpiCard('RTT p95 · 10 s', 'ms', 'rtt_p95', 2) +
+    kpiCard('Jitter · 10 s', 'ms', 'jitter_ms', 2) + kpiCard('Loss / timeouts · 10 s', '%', 'loss_pct', 1, lossCls) +
+    `<div class="kpi"><h3>Throughput · last test</h3>
+      <div class="row"><span class="p tcp">TCP</span><span></span><span class="v num">${f(t && t.throughput_mbps, 1)}<small>Mbit/s</small></span></div>
+      <div class="row"><span class="p udp">UDP</span><span></span><span class="v num">${f(u && u.throughput_mbps, 1)}<small>Mbit/s</small></span></div></div>`;
+}
+function renderHealth(r) {
+  const el = $('#health'), badge = el.querySelector('.badge'), why = el.querySelector('.why');
+  const T = L.stats.TCP, U = L.stats.UDP;
+  if (r.error) { el.className = 'health bad'; badge.textContent = 'OFFLINE'; why.textContent = r.error; return; }
+  if (!r.running) { el.className = 'health idle'; badge.textContent = 'IDLE'; why.textContent = "Enter Computer B's IP and press “Start live probe” to see network health."; return; }
+  if (!U.n && !T.n) { el.className = 'health idle'; badge.textContent = 'WAITING'; why.textContent = 'Waiting for the first probes…'; return; }
+  const bad = [], warn = [];
+  const chk = (name, v, w, b, unit) => { if (v == null) return; if (v > b) bad.push(`${name} ${f(v, 1)}${unit}`); else if (v > w) warn.push(`${name} ${f(v, 1)}${unit}`); };
+  chk('UDP loss', U.loss_pct, 1, 5, '%'); chk('TCP timeouts', T.loss_pct, 1, 5, '%');
+  chk('TCP RTT', T.rtt_avg, 50, 150, ' ms'); chk('UDP RTT', U.rtt_avg, 50, 150, ' ms');
+  chk('TCP jitter', T.jitter_ms, 10, 30, ' ms'); chk('UDP jitter', U.jitter_ms, 10, 30, ' ms');
+  if (U.n && U.rtt_avg == null && T.rtt_avg == null) { el.className = 'health bad'; badge.textContent = 'NO REPLIES'; why.textContent = 'No echoes received – is the server running and the ports open?'; return; }
+  if (bad.length) { el.className = 'health bad'; badge.textContent = 'POOR'; why.textContent = bad.concat(warn).join(' · '); }
+  else if (warn.length) { el.className = 'health warn'; badge.textContent = 'DEGRADED'; why.textContent = warn.join(' · '); }
+  else { el.className = 'health ok'; badge.textContent = 'HEALTHY'; why.innerHTML = `RTT ${f(T.rtt_avg)} ms (TCP) / ${f(U.rtt_avg)} ms (UDP) · jitter ${f(U.jitter_ms)} ms · no loss`; }
+}
+function renderEvents() {
+  const ev = L.events.slice(-30).reverse();
+  $('#events').innerHTML = ev.length ? ev.map(e => `<li><span class="t num">${new Date(e.t * 1000).toLocaleTimeString([], { hour12:false })}</span>
+      <span class="tag ${e.proto.toLowerCase()}">${e.proto}</span><span>${e.proto === 'UDP' ? 'no echo within 1 s (lost)' : 'timeout / connection reset'}</span></li>`).join('')
+    : '<li class="none">No loss or timeout events</li>';
+}
+
+async function poll() {
+  try {
+    const r = await fetch(`/api/live?since=${L.since}&history=${L.window + 10}`).then(r => r.json());
+    L.now = r.now; L.running = r.running;
+    if (r.last_i < L.since) { L.since = 0; L.TCP = []; L.UDP = []; L.lost = []; L.raw = []; L.events = []; L.hist = { TCP:{}, UDP:{} }; }
+    for (const p of r.points) {
+      if (p.lost) { L.lost.push({ x:p.t }); L.events.push(p); } else L[p.proto].push({ x:p.t, y:p.rtt });
+      L.raw.push(p); L.since = Math.max(L.since, p.i);
+    }
+    if (L.raw.length > 30000) L.raw = L.raw.slice(-20000);
+    if (L.events.length > 200) L.events = L.events.slice(-100);
+    const lo = r.now - L.window - 2;
+    for (const k of ['TCP', 'UDP', 'lost']) L[k] = L[k].filter(p => p.x >= lo);
+    L.stats = r.stats;
+    for (const pr of ['TCP', 'UDP']) for (const k of KEYS) { const v = r.stats[pr][k];
+      if (v != null && r.running) { const h = (L.hist[pr][k] = L.hist[pr][k] || []); h.push(v); if (h.length > 40) h.shift(); } }
+    $('#liveEmpty').hidden = L.raw.length > 0;
+    if (!L.paused) updateLiveCharts(r);
+    renderKpis(); renderHealth(r); renderEvents(); setStatus(r);
+  } catch (e) { setStatus({ error:'dashboard server unreachable' }); renderHealth({ error:'Cannot reach the dashboard server' }); }
+  setTimeout(poll, 500);
+}
+
+function updateLiveCharts(r) {
+  const W = L.window, ch = charts.cLive, floor = L.log ? 0.05 : 0;
+  ch.data.datasets[0].data = L.TCP; ch.data.datasets[1].data = L.UDP;
+  ch.data.datasets[2].data = L.lost.map(p => ({ x:p.x, y:floor || 0 }));
+  ch.options.scales.x.min = r.now - W; ch.options.scales.x.max = r.now;
+  ch.update('none');
+  const step = W > 120 ? 5 : 1, n = Math.ceil(W / step), buckets = new Array(n).fill(0);
+  for (const p of L.lost) { const i = n - 1 - Math.floor((r.now - p.x) / step); if (i >= 0 && i < n) buckets[i]++; }
+  const lc = charts.cLossLive;
+  lc.data.labels = buckets.map((_, i) => ((i - n + 1) * step) + 's'); lc.data.datasets[0].data = buckets; lc.update('none');
+  const all = [...L.TCP, ...L.UDP].map(p => p.y);
+  if (all.length) {
+    const hi = Math.max(...all), lo2 = Math.min(...all), bins = 14, w = (hi - lo2) / bins || 1;
+    const h = ['TCP', 'UDP'].map(k => { const a = new Array(bins).fill(0); for (const p of L[k]) a[Math.min(bins - 1, Math.floor((p.y - lo2) / w))]++; return a; });
+    const hc = charts.cHist;
+    hc.data.labels = h[0].map((_, i) => f(lo2 + i * w, hi > 20 ? 0 : 1));
+    hc.data.datasets[0].data = h[0]; hc.data.datasets[1].data = h[1]; hc.update('none');
+  }
+}
+function setStatus(r) {
+  const el = $('#status'), tx = $('#statusText'), b = $('#startBtn');
+  if (r.error) { el.className = 'pill err'; tx.textContent = r.error; }
+  else if (r.running) { el.className = 'pill live'; tx.textContent = 'Live · probing ' + r.server; }
+  else { el.className = 'pill'; tx.textContent = 'Idle'; }
+  b.textContent = r.running ? 'Stop' : 'Start live probe';
+  b.className = 'btn ' + (r.running ? 'stop' : 'primary');
+}
+function setWindow() { L.window = +$('#win').value; $('#rttTitle').textContent = 'Round-trip time · last ' + (L.window >= 300 ? '5 min' : L.window + ' s'); }
+function setLog() { L.log = $('#logscale').checked; liveChart(); }
+function togglePause() { L.paused = !L.paused; $('#pauseBtn').textContent = L.paused ? 'Resume' : 'Pause'; $('#pauseBtn').className = 'btn' + (L.paused ? ' primary' : ''); }
+function exportCsv() {
+  if (!L.raw.length) { toast('Nothing to export yet', true); return; }
+  const rows = ['time_iso,protocol,rtt_ms,lost', ...L.raw.map(p => `${new Date(p.t * 1000).toISOString()},${p.proto},${p.rtt == null ? '' : p.rtt.toFixed(3)},${p.lost ? 1 : 0}`)];
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows.join('\n')], { type:'text/csv' }));
+  a.download = 'live_probe_' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.csv'; a.click();
+}
+
+async function toggleProbe() {
+  if (L.running) { await fetch('/api/live/stop', { method:'POST' }); return; }
+  const server = $('#server').value.trim();
+  if (!server) { toast('Enter the IP of Computer B first', true); $('#server').focus(); return; }
+  try { localStorage.setItem('server', server); } catch (e) {}
+  L.since = 0; L.TCP = []; L.UDP = []; L.lost = []; L.raw = []; L.events = []; L.hist = { TCP:{}, UDP:{} };
+  await fetch('/api/live/start', { method:'POST', headers:{ 'Content-Type':'application/json' },
+    body:JSON.stringify({ server, interval_ms:+$('#interval').value }) });
+}
+async function runThroughput() {
+  const server = $('#server').value.trim();
+  if (!server) { toast('Enter the IP of Computer B first', true); $('#server').focus(); return; }
+  const b = $('#tpBtn'); b.disabled = true; b.textContent = 'Testing… (~6 s)';
+  try {
+    const r = await fetch('/api/throughput', { method:'POST', headers:{ 'Content-Type':'application/json' },
+      body:JSON.stringify({ server, label:$('#label').value }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'test failed');
+    await loadTp(); toast('Throughput test saved under "' + ($('#label').value || 'live') + '"');
+  } catch (e) { toast('Throughput test failed: ' + e.message, true); }
+  b.disabled = false; b.textContent = 'Run throughput test';
+}
+async function loadTp() { L.tp = await fetch('/api/throughput/latest').then(r => r.json()); }
+
+/* --------------------------- experiments --------------------------- */
+async function loadExp() {
+  const sum = await fetch('/api/summary').then(r => r.json());
+  $('#expEmpty').hidden = sum.length > 0; $('#expGrid').hidden = !sum.length;
+  if (!sum.length) return;
+  const conds = [...new Set(sum.map(r => r.condition))];
+  const get = (c, t, k) => { const r = sum.find(x => x.condition === c && x.test === t); return r ? r[k] : null; };
+  const ds = (t1, t2, k) => [
+    { label:'TCP', data:conds.map(c => get(c, t1, k)), backgroundColor:C.tcp, borderRadius:4 },
+    { label:'UDP', data:conds.map(c => get(c, t2, k)), backgroundColor:C.udp, borderRadius:4 }];
+  const bar = (id, datasets, unit) => draw(id, { type:'bar', data:{ labels:conds, datasets },
+    options:{ ...baseOpts, scales:{ y:{ beginAtZero:true, title:{ display:!!unit, text:unit } }, x:{ grid:{ display:false } } } } });
+  bar('cRtt', ds('tcp_rtt', 'udp_rtt', 'rtt_avg'), 'ms');
+  bar('cThr', ds('tcp_bulk', 'udp_throughput', 'throughput_mbps'), 'Mbit/s');
+  bar('cLoss', [{ label:'low rate', data:conds.map(c => get(c, 'udp_rtt', 'loss_pct')), backgroundColor:C.udp, borderRadius:4 },
+                { label:'offered rate', data:conds.map(c => get(c, 'udp_throughput', 'loss_pct')), backgroundColor:C.bad, borderRadius:4 }], '%');
+  bar('cJit', ds('tcp_rtt', 'udp_rtt', 'jitter_ms'), 'ms');
+  const sel = $('#cond'), prev = sel.value;
+  sel.innerHTML = conds.map(c => `<option>${c}</option>`).join('');
+  sel.value = conds.includes(prev) ? prev : conds[0];
+  sel.onchange = loadSeries; loadSeries();
+  $('#tbl').innerHTML = `<table><tr><th>Condition</th><th>Test</th><th>Runs</th><th>RTT min</th><th>RTT avg</th><th>RTT p95</th><th>RTT max</th>
+    <th>Jitter</th><th>Loss %</th><th>Throughput</th><th>TCP retrans</th><th>Connect</th></tr>` +
+    sum.map(r => `<tr class="num"><td>${r.condition}</td><td><span class="tag ${r.protocol.toLowerCase()}">${r.test}</span></td><td>${r.runs}</td>
+      <td>${f(r.rtt_min)}</td><td>${f(r.rtt_avg)}</td><td>${f(r.rtt_p95)}</td><td>${f(r.rtt_max)}</td><td>${f(r.jitter_ms)}</td>
+      <td>${f(r.loss_pct)}</td><td>${r.throughput_mbps == null ? '–' : f(r.throughput_mbps, 1) + ' Mbit/s'}</td>
+      <td>${f(r.retrans, 0)}</td><td>${r.connect_ms == null ? '–' : f(r.connect_ms) + ' ms'}</td></tr>`).join('') + '</table>';
+}
+async function loadSeries() {
+  const c = encodeURIComponent($('#cond').value);
+  const [t, u] = await Promise.all(['tcp_rtt', 'udp_rtt'].map(x => fetch(`/api/samples?condition=${c}&test=${x}`).then(r => r.json())));
+  const xy = a => a.map(p => ({ x:p.seq, y:p.rtt_ms }));
+  draw('cTs', { type:'line', data:{ datasets:[
+      { label:'TCP', data:xy(t), borderColor:C.tcp, borderWidth:1.5, pointRadius:0 },
+      { label:'UDP', data:xy(u), borderColor:C.udp, borderWidth:1.5, pointRadius:0 }] },
+    options:{ ...baseOpts, parsing:false, scales:{ x:{ type:'linear', title:{ display:true, text:'message #' } }, y:{ beginAtZero:true, title:{ display:true, text:'ms' } } } } });
+}
+
+/* ------------------------------ boot ------------------------------ */
+liveChart(); histCharts(); renderKpis(); loadTp().then(renderKpis); poll();
+setInterval(() => { if (tab === 'exp') loadExp(); }, 5000);
+</script>
+</body>
+</html>
